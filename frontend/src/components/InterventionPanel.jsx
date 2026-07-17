@@ -86,7 +86,7 @@ export default function InterventionPanel({ lesson, loading, onGenerate, verify,
                 </div>
               </div>
               <p className="honesty">
-                Updated mastery estimate on the keystone skill — not proof of learning. More
+                Updated mastery estimate on the keystone skill, not proof of learning. More
                 verification questions would tighten it.
               </p>
             </>

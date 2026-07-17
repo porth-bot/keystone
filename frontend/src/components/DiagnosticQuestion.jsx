@@ -42,7 +42,7 @@ export default function DiagnosticQuestion({ question, chosenIndex, next }) {
         <p className="hint">
           Best next question by information gain: <b>{skillName(next.question.skill)}</b>
           {next.separates.length === 2 && (
-            <> — it best separates <b>{next.separates[0]}</b> vs <b>{next.separates[1]}</b>.</>
+            <>. It best separates <b>{next.separates[0]}</b> vs <b>{next.separates[1]}</b>.</>
           )}
         </p>
       )}
