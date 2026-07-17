@@ -1,0 +1,23 @@
+{
+  "_provenance": "Per-skill BKT parameters. These are informed priors (foundational skills start with higher mastery and lower slip; advanced skills lower) that the offline fit in evaluation/fit_bkt.py refits on a labeled cohort. They are NOT fit on real calculus students. See evaluation/model_card.md.",
+  "exponent_rules": { "L0": 0.55, "T": 0.12, "G": 0.2, "S": 0.08 },
+  "factoring": { "L0": 0.55, "T": 0.12, "G": 0.2, "S": 0.08 },
+  "fractions": { "L0": 0.55, "T": 0.12, "G": 0.2, "S": 0.08 },
+  "function_notation": { "L0": 0.6, "T": 0.12, "G": 0.2, "S": 0.08 },
+  "function_composition": { "L0": 0.45, "T": 0.13, "G": 0.22, "S": 0.1 },
+  "inverse_functions": { "L0": 0.42, "T": 0.13, "G": 0.22, "S": 0.1 },
+  "trig_functions": { "L0": 0.42, "T": 0.13, "G": 0.22, "S": 0.1 },
+  "exponential_log": { "L0": 0.4, "T": 0.13, "G": 0.22, "S": 0.1 },
+  "limits_intuition": { "L0": 0.4, "T": 0.14, "G": 0.22, "S": 0.1 },
+  "limit_laws": { "L0": 0.38, "T": 0.14, "G": 0.22, "S": 0.1 },
+  "continuity": { "L0": 0.38, "T": 0.14, "G": 0.22, "S": 0.1 },
+  "derivative_definition": { "L0": 0.32, "T": 0.15, "G": 0.2, "S": 0.1 },
+  "power_rule": { "L0": 0.35, "T": 0.16, "G": 0.2, "S": 0.1 },
+  "product_quotient_rule": { "L0": 0.3, "T": 0.15, "G": 0.2, "S": 0.1 },
+  "chain_rule": { "L0": 0.28, "T": 0.15, "G": 0.2, "S": 0.1 },
+  "implicit_differentiation": { "L0": 0.24, "T": 0.15, "G": 0.22, "S": 0.12 },
+  "related_rates": { "L0": 0.22, "T": 0.15, "G": 0.22, "S": 0.12 },
+  "optimization": { "L0": 0.22, "T": 0.15, "G": 0.22, "S": 0.12 },
+  "antiderivatives": { "L0": 0.22, "T": 0.15, "G": 0.22, "S": 0.12 },
+  "u_substitution": { "L0": 0.2, "T": 0.15, "G": 0.22, "S": 0.12 }
+}
