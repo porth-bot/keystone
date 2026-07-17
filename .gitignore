@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+.env
+.vite/
+__pycache__/
+*.pyc
+.venv/
+venv/
+# local datasets are not redistributed (see evaluation/README.md)
+evaluation/data/
