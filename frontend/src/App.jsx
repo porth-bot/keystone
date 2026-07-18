@@ -300,7 +300,12 @@ export default function App() {
               </span>
             </div>
           )}
-          <p className="home-note">Adaptive · usually {MIN_QUESTIONS}-7 questions · answer with keys A-D · no sign-up</p>
+          <div className="proof-strip">
+            <div><b>Adaptive</b><span>every question is picked to separate the likely causes fastest</span></div>
+            <div><b>Evidence-backed</b><span>shows the errors it saw, and why the runner-up was ruled out</span></div>
+            <div><b>Verified</b><span>teaches the one gap, then re-measures mastery with fresh practice</span></div>
+          </div>
+          <p className="home-note">Usually {MIN_QUESTIONS}-7 questions · answer with keys A-D · no sign-up</p>
         </main>
       )}
 
