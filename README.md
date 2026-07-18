@@ -21,16 +21,16 @@ A Bayesian model updates a probability over every possible root-cause skill
         v
 The engine picks the next question that best separates the leading hypotheses
         v   (repeat until confident, or "insufficient evidence")
-Root-cause reveal: keystone skill + ranked hypotheses + "why not the runner-up"
+Diagnosis: keystone skill + the evidence ("what we saw", "why not the runner-up")
         v
-Claude writes a targeted micro-lesson + one verification question
+Claude writes a targeted micro-lesson + three fresh practice questions
         v
-Student answers it -> mastery re-measured -> before% / after% shown
+Practice loop: each answer re-measures mastery -> session report (before% / now%)
 ```
 
-The last step is the differentiator. Many entries diagnose, or generate a fix. Keystone diagnoses, fixes, **and** verifies.
+The last steps are the differentiator. Many entries diagnose, or generate a fix. Keystone diagnoses, fixes, **and** verifies, then hands the student a session report they can copy to their teacher.
 
-Load Profile A in the app and click **Diagnose**: the model rules out the chain rule and lands on **function composition**, then lights up every downstream skill that one gap is blocking.
+In the app: **Start the diagnostic** and miss a couple of composition-flavored questions; the model rules out the chain rule, lands on **function composition**, shows the misconceptions it observed in your actual answers, teaches that one skill, and re-measures it across a practice run. (Or click **Watch a 30-second sample** for the hands-off version.)
 
 ---
 
@@ -45,7 +45,7 @@ Each layer answers a question the others cannot. This is why "AI is core, not an
 | 3. Question selection | What should we ask next? | Expected information gain (entropy reduction) | [`engine/selection.js`](frontend/src/engine/selection.js) |
 | 4. Intervention | How do we reteach it? | Claude, fed structured diagnostic evidence | [`services/claude.js`](frontend/src/services/claude.js) |
 
-**The one line to remember: the model finds the gap, the LLM only explains it.** Claude never decides the keystone. It receives structured evidence (the diagnosed skill, mastery probability, the student's observed error tags, mastered prerequisites, blocked skills) and returns a strict-JSON micro-lesson plus a verification question.
+**The one line to remember: the model finds the gap, the LLM only explains it.** Claude never decides the keystone. It receives structured evidence (the diagnosed skill, mastery probability, the student's observed error tags, mastered prerequisites, blocked skills) and returns a strict-JSON micro-lesson plus three fresh practice questions. Without an API key, a deterministic lesson + per-keystone practice bank serves the same shapes, so the app never depends on the network.
 
 ---
 
@@ -73,7 +73,7 @@ The chain rule has two parents on purpose (power rule and composition), which is
 
 Honesty is a scoring factor, and judges check. So the labels are exact.
 
-**In the app** (the "Automated tests & model validation" panel): a **synthetic cohort** of ~1,200 simulated students generated from the misconception/BKT model. Held-out next-answer prediction, BKT vs baselines, seeded so the numbers are stable:
+**In the app** (the "How Keystone works" footer): a **synthetic cohort** of ~1,200 simulated students generated from the misconception/BKT model. Held-out next-answer prediction, BKT vs baselines, seeded so the numbers are stable:
 
 | Model | ROC AUC | Accuracy | Brier |
 |---|---|---|---|
@@ -166,8 +166,8 @@ Short version below; full mapping in [`docs/rubric-mapping.md`](docs/rubric-mapp
 keystone/
   frontend/          React + Vite app (runs everything client-side)
     src/engine/      bkt, diagnosis, selection, graph, validation
-    src/data/        skills, edges, questions, demoProfiles, parameters.json
-    src/components/  SkillGraph, EvidencePanel, InterventionPanel, ...
+    src/data/        skills, edges, questions, practice, demoProfiles, parameters.json
+    src/components/  QuestionCard, HowItWorks
     src/services/    claude.js (live API + deterministic fallback)
   evaluation/        offline BKT fit + held-out evaluation (pure Python)
   tests/             headless profile + invariant tests (node)
