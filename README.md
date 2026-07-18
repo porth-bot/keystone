@@ -2,7 +2,7 @@
 
 **Keystone finds the hidden prerequisite skill causing a student's mistakes, reteaches that exact gap, and verifies the fix actually improved mastery.**
 
-![Keystone locates the keystone skill (gold) and lights up the downstream skills it is blocking (red), while skills that tested clean stay muted.](docs/skill-graph.png)
+![Keystone names the student's keystone skill after an adaptive diagnostic, and lists the downstream skills that fixing it unblocks.](docs/diagnosis.png)
 
 Most tutoring tools reteach the skill where the error showed up. But the visible mistake is usually not the real problem. A student who keeps missing the chain rule may not have a chain-rule problem at all: the real gap might be function composition, one layer underneath. Keystone is a diagnostic engine that finds the cause beneath the visible error and closes the loop.
 

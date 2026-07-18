@@ -12,42 +12,28 @@ import { selectNextQuestion } from './engine/selection.js';
 import { runBKT, paramsFor, updateBKT } from './engine/bkt.js';
 import { generateIntervention } from './services/claude.js';
 
-import SkillGraph from './components/SkillGraph.jsx';
 import QuestionCard from './components/QuestionCard.jsx';
-import ConfidenceGauge from './components/ConfidenceGauge.jsx';
-import EvidencePanel from './components/EvidencePanel.jsx';
-import InterventionPanel from './components/InterventionPanel.jsx';
-import TeacherSummary from './components/TeacherSummary.jsx';
-import ValidationPanel from './components/ValidationPanel.jsx';
+import HowItWorks from './components/HowItWorks.jsx';
 
 const SKILL_IDS = SKILLS.map((s) => s.id);
-const runnerName = (id) => (id === HEALTHY ? 'no-gap' : skillName(id));
-
-// Humanize the "why not the runner-up" sentence from the log-likelihood-ratio evidence.
-function whyNotText(whyNot) {
-  if (!whyNot) return '';
-  const { keyObservation: o, runnerUp } = whyNot;
-  const did = o.correct ? 'solved' : 'missed';
-  const pred = o.correct ? 'miss' : 'solve';
-  return `The student ${did} a ${skillName(o.skill)} question, which a ${runnerName(runnerUp)} gap predicts they would ${pred}. That rules it out.`;
-}
+const MIN_QUESTIONS = 4; // matches the engine's insufficient-evidence gate
+const clean = (t) => (t ? t.replaceAll(' — ', ', ') : t);
 
 export default function App() {
   const graph = useMemo(() => buildGraph(SKILL_IDS, EDGES), []);
   const hypotheses = useMemo(() => buildHypotheses(SKILL_IDS, graph, {}), [graph]);
 
-  const [phase, setPhase] = useState('start'); // start | session | reveal | lesson
-  const [mode, setMode] = useState('interactive'); // interactive | auto
+  const [screen, setScreen] = useState('home'); // home | quiz | diagnosis | lesson | verify
+  const [mode, setMode] = useState('live'); // live | demo
   const [profileId, setProfileId] = useState(null);
   const [answers, setAnswers] = useState([]); // [[questionId, choiceIndex], ...]
-  const [answeredCard, setAnsweredCard] = useState(null); // interactive feedback beat
+  const [answeredCard, setAnsweredCard] = useState(null); // brief feedback beat
   const [lesson, setLesson] = useState(null);
   const [loading, setLoading] = useState(false);
   const [verify, setVerify] = useState({ answeredIndex: null, before: 0, after: 0 });
   const [apiKey, setApiKey] = useState('');
 
   const profile = profileId ? DEMO_PROFILES.find((p) => p.id === profileId) : null;
-  const profileName = profile ? profile.label.split(/[—:]/)[0].trim() : '';
 
   const observations = useMemo(() => answers.map(([q, c]) => toObservation(q, c)), [answers]);
   const mastery = useMemo(() => runBKT(observations, SKILL_IDS, params), [observations]);
@@ -58,76 +44,61 @@ export default function App() {
 
   const answeredIds = useMemo(() => new Set(answers.map(([q]) => q)), [answers]);
   const nextPick = useMemo(() => {
-    if (phase !== 'session' || mode !== 'interactive' || diagnosis.sufficient) return null;
+    if (screen !== 'quiz' || mode !== 'live' || diagnosis.sufficient) return null;
     const candidates = QUESTIONS.filter((q) => !answeredIds.has(q.id));
     if (!candidates.length) return null;
     return selectNextQuestion(candidates, observations, SKILL_IDS, graph, { hypotheses, params });
-  }, [phase, mode, diagnosis.sufficient, answeredIds, observations, graph, hypotheses]);
+  }, [screen, mode, diagnosis.sufficient, answeredIds, observations, graph, hypotheses]);
 
-  const autoExhausted = mode === 'auto' && profile && answers.length >= profile.answers.length;
-  const insufficientEnd = phase === 'session' && !diagnosis.sufficient && autoExhausted;
+  const demoDone = mode === 'demo' && profile && answers.length >= profile.answers.length;
 
-  // Auto-play: feed the scripted student's WHOLE session, one answer at a time, so the evidence and
-  // confidence visibly build (and the "why not the runner-up" story earns its full strength) before
-  // the reveal — rather than cutting off the moment the gate first trips.
+  // Demo: play a scripted student's whole session so the result builds to full strength.
   useEffect(() => {
-    if (phase !== 'session' || mode !== 'auto' || !profile) return;
+    if (screen !== 'quiz' || mode !== 'demo' || !profile) return;
     if (answers.length >= profile.answers.length) return;
-    const t = setTimeout(
-      () => setAnswers((a) => [...a, profile.answers[a.length]]),
-      answers.length === 0 ? 450 : 1150,
-    );
+    const t = setTimeout(() => setAnswers((a) => [...a, profile.answers[a.length]]), answers.length === 0 ? 400 : 1050);
     return () => clearTimeout(t);
-  }, [phase, mode, profile, answers]);
+  }, [screen, mode, profile, answers]);
 
-  // Interactive: hold the just-answered card briefly (correct/incorrect feedback) before the next.
+  // Hold the just-answered card briefly (correct/incorrect feedback) before the next question.
   useEffect(() => {
     if (!answeredCard) return;
-    const t = setTimeout(() => setAnsweredCard(null), 1050);
+    const t = setTimeout(() => setAnsweredCard(null), 950);
     return () => clearTimeout(t);
   }, [answeredCard]);
 
-  // The payoff. Interactive: reveal the moment the gate clears (don't over-ask). Auto: let the whole
-  // scripted session play, then reveal if it earned a keystone (Profile D stays on "insufficient").
+  // Move to the result once the engine is confident (live) or the demo student finishes.
   useEffect(() => {
-    if (phase !== 'session') return;
-    const done = mode === 'auto' ? autoExhausted : diagnosis.sufficient;
-    if (done && diagnosis.sufficient) {
+    if (screen !== 'quiz') return;
+    const ready = mode === 'demo' ? demoDone : diagnosis.sufficient;
+    if (ready) {
       const t = setTimeout(() => {
         setAnsweredCard(null);
-        setPhase('reveal');
-      }, mode === 'auto' ? 750 : 1150);
+        setScreen('diagnosis');
+      }, mode === 'demo' ? 700 : 1000);
       return () => clearTimeout(t);
     }
-  }, [phase, mode, autoExhausted, diagnosis.sufficient]);
+  }, [screen, mode, demoDone, diagnosis.sufficient]);
 
-  function startInteractive() {
-    setMode('interactive');
-    setProfileId(null);
-    resetSession();
-  }
-  function startAuto(id) {
-    setMode('auto');
-    setProfileId(id);
-    resetSession();
-  }
-  function resetSession() {
+  // Generate the lesson as soon as the student reaches the Learn step.
+  useEffect(() => {
+    if (screen === 'lesson' && !lesson && !loading) handleGenerate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen]);
+
+  function reset(toScreen) {
     setAnswers([]);
     setAnsweredCard(null);
     setLesson(null);
+    setLoading(false);
     setVerify({ answeredIndex: null, before: 0, after: 0 });
-    setPhase('session');
+    setScreen(toScreen);
   }
-  function newSession() {
-    setPhase('start');
-    setProfileId(null);
-    setAnswers([]);
-    setAnsweredCard(null);
-    setLesson(null);
-    setVerify({ answeredIndex: null, before: 0, after: 0 });
-  }
+  function startLive() { setMode('live'); setProfileId(null); reset('quiz'); }
+  function startDemo(id = 'A') { setMode('demo'); setProfileId(id); reset('quiz'); }
+  function goHome() { setMode('live'); setProfileId(null); reset('home'); }
 
-  function answerInteractive(i) {
+  function answerQuiz(i) {
     if (!nextPick) return;
     setAnsweredCard({ question: nextPick.question, choiceIndex: i });
     setAnswers((a) => [...a, [nextPick.question.id, i]]);
@@ -135,6 +106,7 @@ export default function App() {
 
   async function handleGenerate() {
     const keystone = diagnosis.keystone;
+    if (!keystone) return;
     const errorTags = [...new Set(observations.filter((o) => !o.correct && o.errorTag).map((o) => o.errorTag))];
     const evidence = {
       skill: keystone,
@@ -158,215 +130,226 @@ export default function App() {
     const after = updateBKT(before, correct, paramsFor(params, keystone));
     setVerify({ answeredIndex: i, before, after });
   }
+  function retest() {
+    setLesson(null);
+    setVerify({ answeredIndex: null, before: 0, after: 0 });
+    setScreen('lesson');
+  }
 
-  const revealed = phase === 'reveal' || phase === 'lesson';
-  const blockedCount = diagnosis.sufficient ? diagnosis.impaired.filter((s) => s !== diagnosis.keystone).length : 0;
+  // ---- derived view helpers ----
+  const keystone = diagnosis.keystone;
+  const blocked = keystone ? graph.descendants[keystone].map(skillName) : [];
+  const confPct = Math.round((diagnosis.top?.prob ?? 0) * 100);
+  const topReal = diagnosis.top && diagnosis.top.id !== HEALTHY;
+  const leadName = topReal ? skillName(diagnosis.top.id) : null;
 
-  // ---- top-bar status ----
-  let status = { dot: '', text: 'No active session' };
-  if (phase === 'session' && !insufficientEnd)
-    status = { dot: 'live', text: mode === 'auto' ? `Auto-playing ${profileName}` : `Live diagnostic · ${answers.length} answered` };
-  else if (insufficientEnd) status = { dot: '', text: 'Insufficient evidence' };
-  else if (revealed) status = { dot: 'locked', text: 'Keystone located' };
+  const steps = ['Diagnose', 'Learn', 'Verify'];
+  const stepIndex = screen === 'lesson' ? 1 : screen === 'verify' ? 2 : 0;
+
+  // quiz progress reading
+  let reading = 'Answer to begin';
+  if (answers.length > 0) {
+    if (!topReal) reading = 'Looking solid so far';
+    else if (diagnosis.top.prob < 0.35) reading = 'Gathering signal';
+    else reading = `Leaning toward ${leadName}`;
+  }
+  const progress = Math.min((diagnosis.top?.prob ?? 0) / 0.5, 1) * 100;
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <div className="brand">
+    <div className="shell">
+      <header className="appbar">
+        <button className="brand-btn" onClick={goHome} aria-label="Keystone home">
           <svg className="brand-glyph" viewBox="0 0 26 26" aria-hidden="true">
             <rect width="26" height="26" rx="7" fill="var(--accent)" />
             <path d="M6.5 7 h13 l-2.6 12 h-7.8 z" fill="var(--paper)" />
           </svg>
           <span className="wordmark"><span className="k">Key</span>stone</span>
-        </div>
-        <span className="subject-chip">single-variable calculus</span>
-        <div className="spacer" />
-        {phase !== 'start' && (
-          <>
-            <span className="session-status">
-              <span className={`status-dot ${status.dot}`} />
-              {status.text}
-            </span>
-            <button className="sm" onClick={newSession}>↺ New session</button>
-          </>
+        </button>
+        {screen !== 'home' && (
+          <div className="stepper">
+            {steps.map((s, i) => (
+              <span key={s} className={`step${i === stepIndex ? ' on' : ''}${i < stepIndex ? ' done' : ''}`}>{s}</span>
+            ))}
+          </div>
         )}
+        {screen !== 'home' && <button className="sm ghost" onClick={goHome}>Exit</button>}
       </header>
 
-      <section className="panel map-band">
-        <div className="map-head">
-          <h2 style={{ margin: 0 }}>
-            Knowledge map <span className="layer-tag">· Layer 1 · Bayesian mastery, live</span>
-          </h2>
-        </div>
-        <SkillGraph
-          skills={SKILLS}
-          edges={EDGES}
-          mastery={mastery}
-          reveal={revealed ? diagnosis : null}
-          assessed={new Set(observations.map((o) => o.skill))}
-        />
-      </section>
+      {/* ---------------- HOME ---------------- */}
+      {screen === 'home' && (
+        <main className="home">
+          <p className="eyebrow">Calculus diagnostic tutor</p>
+          <h1>Let's find what's actually<br />tripping you up.</h1>
+          <p className="lead">
+            Keep missing the same kind of problem? The mistake you see is usually a symptom. Answer a
+            few questions and Keystone finds the one prerequisite underneath it, teaches that, and
+            checks that it stuck.
+          </p>
+          <div className="home-cta">
+            <button className="primary lg" onClick={startLive}>Start the diagnostic →</button>
+            <button className="link" onClick={() => startDemo('A')}>▶ Watch a 30-second sample</button>
+          </div>
+          <p className="home-note">Adaptive · usually {MIN_QUESTIONS}–7 questions · no sign-up</p>
+        </main>
+      )}
 
-      <div className="work">
-        {/* ---- center stage ---- */}
-        <div className="main-col" style={{ display: 'grid', gap: 20 }}>
-          {phase === 'start' && (
-            <div className="panel start">
-              <p className="eyebrow">A diagnostic engine, not another tutor</p>
-              <h1>
-                Find the idea beneath<br />the <em>mistake</em>.
-              </h1>
-              <p className="lead">
-                A student keeps missing the chain rule. Most tools reteach the chain rule. Keystone
-                finds the prerequisite the error actually traces back to, reteaches that, and checks
-                whether mastery moved.
-              </p>
-              <div className="start-actions">
-                <button className="primary" onClick={startInteractive}>Take the diagnostic ▸</button>
-                <span className="or">or watch a sample student</span>
-                {DEMO_PROFILES.map((p) => (
-                  <button key={p.id} className="chip" onClick={() => startAuto(p.id)} title={p.label}>
-                    {p.id}
-                  </button>
-                ))}
-              </div>
-              <div className="start-note">
-                <div className="mini"><b>Diagnose</b>a Bayesian posterior over every possible root-cause skill.</div>
-                <div className="mini"><b>Ask</b>the next question chosen for maximum information gain.</div>
-                <div className="mini"><b>Verify</b>re-measure mastery after the fix, or admit it can't tell yet.</div>
-              </div>
+      {/* ---------------- QUIZ ---------------- */}
+      {screen === 'quiz' && (
+        <main className="stage">
+          <div className="quiz-head">
+            <div className="quiz-line">
+              <span className="q-index">{mode === 'demo' ? 'Sample run' : `Question ${answers.length + (answeredCard ? 0 : 1)}`}</span>
+              <span className="reading">{reading}</span>
             </div>
-          )}
+            <div className="progress"><span style={{ width: `${progress}%` }} /></div>
+          </div>
 
-          {phase === 'session' && mode === 'interactive' && (
+          {mode === 'live' ? (
             answeredCard ? (
               <QuestionCard
                 question={answeredCard.question}
                 mode="review"
                 chosenIndex={answeredCard.choiceIndex}
-                count={`answer ${answers.length}`}
-                caption={
-                  answeredCard.choiceIndex === answeredCard.question.ans
-                    ? 'Recorded as correct. Evidence updated.'
-                    : "Recorded as a miss. That's a signal — evidence updated."
-                }
+                caption={answeredCard.choiceIndex === answeredCard.question.ans ? 'Correct.' : 'Noted, that is useful signal.'}
               />
             ) : nextPick ? (
-              <QuestionCard
-                question={nextPick.question}
-                mode="answer"
-                onAnswer={answerInteractive}
-                count={`question ${answers.length + 1}`}
-                caption={
-                  nextPick.separates.length === 2 ? (
-                    <>Adaptive pick · this question best separates <b>{skillName(nextPick.separates[0])}</b> vs <b>{skillName(nextPick.separates[1])}</b>.</>
-                  ) : (
-                    'Adaptive pick · chosen to shrink uncertainty fastest.'
-                  )
-                }
-              />
+              <QuestionCard question={nextPick.question} mode="answer" onAnswer={answerQuiz} />
             ) : (
-              <div className="panel">
-                <h2>Out of questions</h2>
-                <p className="hint">The bank is exhausted and the evidence still isn't conclusive — Keystone won't force a guess.</p>
+              <div className="card center">
+                <p>You've answered everything and there is still no single clear gap.</p>
+                <button className="primary" onClick={() => setScreen('diagnosis')}>See what we found →</button>
               </div>
             )
+          ) : answers.length ? (
+            <QuestionCard
+              question={QUESTION_BY_ID[answers[answers.length - 1][0]]}
+              mode="review"
+              chosenIndex={answers[answers.length - 1][1]}
+            />
+          ) : (
+            <div className="card center"><p className="muted">Starting sample…</p></div>
           )}
 
-          {phase === 'session' && mode === 'auto' && (
-            insufficientEnd ? (
-              <div className="panel">
-                <h2>Insufficient evidence <span className="layer-tag">· the gate holds</span></h2>
-                <p className="q-prompt" style={{ fontSize: 20 }}>Keystone won't guess.</p>
-                <p className="hint" style={{ fontSize: 14 }}>
-                  {diagnosis.reason} A system that only diagnoses when the evidence earns it is one you
-                  can trust with the cases where it does.
-                </p>
-                <button className="ghost sm" style={{ marginTop: 8 }} onClick={newSession}>↺ Try another student</button>
-              </div>
-            ) : answers.length ? (
-              <QuestionCard
-                question={QUESTION_BY_ID[answers[answers.length - 1][0]]}
-                mode="review"
-                chosenIndex={answers[answers.length - 1][1]}
-                count={`answer ${answers.length} of ${profile.answers.length}`}
-                caption={<>Auto-playing <b>{profileName}</b> — watch the posterior on the right shift with each answer.</>}
-              />
-            ) : (
-              <div className="panel"><h2>Starting session…</h2></div>
-            )
+          {mode === 'live' && answers.length >= MIN_QUESTIONS && !diagnosis.sufficient && !answeredCard && (
+            <button className="link center-block" onClick={() => setScreen('diagnosis')}>Stop and show my result →</button>
           )}
+        </main>
+      )}
 
-          {revealed && diagnosis.sufficient && (
-            <div className="panel reveal">
-              <p className="kicker">◆ Root cause located</p>
-              <h2 className="keyname">The keystone is <em>{skillName(diagnosis.keystone)}</em>.</h2>
-              <p className="keysub">
-                It is the earliest skill the evidence flags as weak, and it sits upstream of{' '}
-                <b>{blockedCount}</b> skill{blockedCount === 1 ? '' : 's'} the student is getting wrong.
+      {/* ---------------- DIAGNOSIS ---------------- */}
+      {screen === 'diagnosis' && (
+        <main className="stage">
+          {diagnosis.sufficient ? (
+            <div className="card result">
+              <p className="kicker">◆ We found it</p>
+              <h2 className="keyname">Your keystone is <em>{skillName(keystone)}</em>.</h2>
+              <p className="result-lead">
+                Every problem you missed builds on {skillName(keystone).toLowerCase()}, and the skills
+                above it tested clean. It is the earliest place the evidence points, so it is the one
+                worth fixing first. {confPct}% confident after {answers.length} questions.
               </p>
-              <div className="whyrow">
-                <div className="whybox why">
-                  <div className="lbl">Why this</div>
-                  <div className="body">
-                    Confirmed at {Math.round(diagnosis.top.prob * 100)}% after {answers.length} questions.
-                    Every wrong answer lies downstream of {skillName(diagnosis.keystone)}; the skills above it tested clean.
+              {blocked.length > 0 && (
+                <div className="unblocks">
+                  <div className="unblocks-label">Fixing this unblocks</div>
+                  <div className="chips">
+                    {blocked.map((b) => (<span className="chip-pill" key={b}>{b}</span>))}
                   </div>
                 </div>
-                {diagnosis.whyNot && (
-                  <div className="whybox whynot-box">
-                    <div className="lbl">Why not {runnerName(diagnosis.whyNot.runnerUp)}</div>
-                    <div className="body">{whyNotText(diagnosis.whyNot)}</div>
-                  </div>
-                )}
-              </div>
-              {phase === 'reveal' && (
-                <button className="gold" onClick={() => setPhase('lesson')}>Build the targeted fix ▸</button>
               )}
+              <button className="gold lg" onClick={() => setScreen('lesson')}>Teach me this →</button>
+            </div>
+          ) : (
+            <div className="card result">
+              <p className="kicker">All clear</p>
+              <h2 className="keyname">No single weak spot.</h2>
+              <p className="result-lead">
+                {topReal
+                  ? `The evidence isn't conclusive enough to name one gap yet (leading guess: ${leadName}, ${confPct}%). Keystone would rather ask more than guess wrong.`
+                  : 'Your prerequisites are holding up well across the board, nothing is clearly blocking you.'}
+              </p>
+              <div className="result-actions">
+                <button className="primary" onClick={() => setScreen('quiz')}>Answer a few more →</button>
+                <button className="ghost" onClick={startLive}>Start over</button>
+              </div>
             </div>
           )}
+        </main>
+      )}
 
-          {revealed && diagnosis.sufficient && <TeacherSummary diagnosis={diagnosis} nObs={answers.length} />}
-
-          {phase === 'lesson' && (
-            <InterventionPanel
-              lesson={lesson}
-              loading={loading}
-              onGenerate={handleGenerate}
-              canGenerate
-              verify={{ ...verify, onAnswer: answerVerification }}
-            />
-          )}
-        </div>
-
-        {/* ---- live readout ---- */}
-        <div className="side-col">
-          <div className="panel">
-            <h2>Diagnostic confidence <span className="layer-tag">· Layer 2</span></h2>
-            <ConfidenceGauge
-              prob={diagnosis.top?.prob ?? 0}
-              leadName={diagnosis.top ? (diagnosis.top.id === HEALTHY ? 'no clear gap' : skillName(diagnosis.top.id)) : ''}
-              locked={revealed && diagnosis.sufficient}
-              active={answers.length > 0}
-            />
+      {/* ---------------- LESSON ---------------- */}
+      {screen === 'lesson' && diagnosis.sufficient && (
+        <main className="stage">
+          <div className="card lesson">
+            <div className="lesson-top">
+              <h2 className="lesson-title">{skillName(keystone)}</h2>
+              {lesson && (
+                <span className={`source-badge ${lesson.source}`}>
+                  {lesson.source === 'claude' ? 'written live by Claude' : 'targeted lesson'}
+                </span>
+              )}
+            </div>
+            {loading || !lesson ? (
+              <p className="muted loading-line">Writing a lesson for your exact misconception…</p>
+            ) : (
+              <>
+                <div className="lblock">
+                  <div className="lbl">The misconception</div>
+                  <p>{clean(lesson.misconception)}</p>
+                </div>
+                <div className="lblock">
+                  <div className="lbl">A better way to see it</div>
+                  <p>{clean(lesson.analogy)}</p>
+                </div>
+                <div className="lblock">
+                  <div className="lbl">Worked example</div>
+                  <p className="mono ex">{clean(lesson.workedExample)}</p>
+                </div>
+                <button className="primary lg" onClick={() => setScreen('verify')}>Check my understanding →</button>
+              </>
+            )}
           </div>
-          <EvidencePanel diagnosis={answers.length ? diagnosis : null} nObs={answers.length} whyNotText={whyNotText} />
-        </div>
-      </div>
+        </main>
+      )}
 
-      <div className="footer">
-        <ValidationPanel skillIds={SKILL_IDS} graph={graph} hypotheses={hypotheses} params={params} />
-        <p className="api-note">
-          Lessons run on a deterministic fallback by default so the demo never breaks. To generate them
-          live with Claude, paste an Anthropic API key (held in memory only, never stored):{' '}
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="sk-ant-… (optional)"
+      {/* ---------------- VERIFY ---------------- */}
+      {screen === 'verify' && diagnosis.sufficient && lesson && (
+        <main className="stage">
+          <QuestionCard
+            question={{ skill: keystone, prompt: lesson.verification.prompt, ans: lesson.verification.answerIndex, choices: lesson.verification.choices.map((t) => ({ t })) }}
+            mode={verify.answeredIndex == null ? 'answer' : 'review'}
+            chosenIndex={verify.answeredIndex}
+            onAnswer={answerVerification}
+            caption={verify.answeredIndex == null ? 'One check on the skill we just taught.' : null}
           />
-        </p>
-      </div>
+
+          {verify.answeredIndex != null && (
+            <div className="card verify-result">
+              <h3>{verify.answeredIndex === lesson.verification.answerIndex ? 'That is it.' : 'Not quite, but that is what practice is for.'}</h3>
+              <p className="muted">Estimated mastery of {skillName(keystone).toLowerCase()}, an updated estimate, not proof.</p>
+              <div className="delta">
+                <div className="row before"><span className="cap">before</span><span className="bar"><span style={{ width: `${Math.round(verify.before * 100)}%` }} /></span><span className="num">{Math.round(verify.before * 100)}%</span></div>
+                <div className="row after"><span className="cap">after</span><span className="bar"><span style={{ width: `${Math.round(verify.after * 100)}%` }} /></span><span className="num">{Math.round(verify.after * 100)}%</span></div>
+              </div>
+              <div className="result-actions">
+                <button className="primary" onClick={retest}>Another practice question</button>
+                <button className="ghost" onClick={startLive}>New diagnostic</button>
+              </div>
+            </div>
+          )}
+        </main>
+      )}
+
+      <footer className="foot">
+        <HowItWorks
+          skillIds={SKILL_IDS}
+          graph={graph}
+          hypotheses={hypotheses}
+          params={params}
+          apiKey={apiKey}
+          setApiKey={setApiKey}
+          onDemo={startDemo}
+        />
+      </footer>
     </div>
   );
 }
