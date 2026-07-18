@@ -4,6 +4,7 @@
 // AND verify. Honestly labeled as an updated estimate, not proof.
 
 export default function InterventionPanel({ lesson, loading, onGenerate, verify, canGenerate }) {
+  const cleanText = (text) => text?.replaceAll(' — ', '. ');
   return (
     <div className="panel">
       <h2>
@@ -31,20 +32,20 @@ export default function InterventionPanel({ lesson, loading, onGenerate, verify,
         <>
           <div className="lesson-block">
             <div className="lbl">Misconception</div>
-            <div className="body">{lesson.misconception}</div>
+            <div className="body">{cleanText(lesson.misconception)}</div>
           </div>
           <div className="lesson-block">
             <div className="lbl">Analogy</div>
-            <div className="body">{lesson.analogy}</div>
+            <div className="body">{cleanText(lesson.analogy)}</div>
           </div>
           <div className="lesson-block">
             <div className="lbl">Worked example</div>
-            <div className="body mono" style={{ fontSize: 13 }}>{lesson.workedExample}</div>
+            <div className="body mono" style={{ fontSize: 13 }}>{cleanText(lesson.workedExample)}</div>
           </div>
 
           <div className="lesson-block">
             <div className="lbl">Verification question</div>
-            <div className="body">{lesson.verification.prompt}</div>
+            <div className="body">{cleanText(lesson.verification.prompt)}</div>
           </div>
           <div className="choices">
             {lesson.verification.choices.map((c, i) => {
@@ -63,7 +64,7 @@ export default function InterventionPanel({ lesson, loading, onGenerate, verify,
                   onClick={() => verify.onAnswer(i)}
                 >
                   <span className="key">{String.fromCharCode(65 + i)}</span>
-                  <span>{c}</span>
+                  <span>{cleanText(c)}</span>
                 </button>
               );
             })}

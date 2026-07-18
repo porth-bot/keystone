@@ -5,11 +5,15 @@
 import { skillName } from '../data/skills.js';
 
 export default function DiagnosticQuestion({ question, chosenIndex, next }) {
+  const cleanText = (text) => text?.replaceAll(' — ', ': ');
   if (!question) {
     return (
       <div className="panel">
         <h2>Diagnostic question <span className="layer-tag">· Layer 3: adaptive selection</span></h2>
-        <p className="hint">Load a student profile to start gathering evidence.</p>
+        <div className="empty-state">
+          <span className="empty-number">01</span>
+          <div><b>Start with a real mistake.</b><p>Keystone selects the next question that most clearly separates the possible root causes.</p></div>
+        </div>
       </div>
     );
   }
@@ -31,8 +35,8 @@ export default function DiagnosticQuestion({ question, chosenIndex, next }) {
             <div key={i} className={cls}>
               <span className="key">{String.fromCharCode(65 + i)}</span>
               <span>
-                {c.t}
-                {isChosen && !isCorrect && c.tag && <span className="tag">student's error: {c.tag}</span>}
+                {cleanText(c.t)}
+                {isChosen && !isCorrect && c.tag && <span className="tag">student's error: {cleanText(c.tag)}</span>}
               </span>
             </div>
           );

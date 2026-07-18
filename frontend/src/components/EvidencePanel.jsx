@@ -10,7 +10,10 @@ export default function EvidencePanel({ diagnosis, nObs }) {
     return (
       <div className="panel">
         <h2>Evidence <span className="layer-tag">· Layer 2: root-cause posterior</span></h2>
-        <p className="hint">No observations yet.</p>
+        <div className="empty-state">
+          <span className="empty-number">02</span>
+          <div><b>Make uncertainty visible.</b><p>Every answer updates a ranked set of explanations. Keystone only reveals a gap when the evidence is strong enough.</p></div>
+        </div>
       </div>
     );
   }

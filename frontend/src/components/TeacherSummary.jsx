@@ -9,7 +9,7 @@ export default function TeacherSummary({ diagnosis, nObs }) {
   const confidence = Math.round(diagnosis.top.prob * 100);
   return (
     <div className="panel wide">
-      <h2>Teacher summary</h2>
+      <h2>Recommended next move</h2>
       <div className="teacher-grid">
         <div className="stat">
           <div className="n accent">{skillName(diagnosis.keystone)}</div>
