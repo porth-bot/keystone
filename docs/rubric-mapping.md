@@ -6,14 +6,15 @@ How each scored dimension is earned, with pointers into the repo.
 
 - **Real problem, stated plainly.** Teachers and students see *where* an error happened, not the
   prerequisite misconception that caused it. Drilling the visible errors treats symptoms.
-- **Quantified.** The teacher summary card turns the diagnosis into numbers: one keystone skill, N
-  downstream skills it unblocks, the confidence, and the evidence count
-  (`frontend/src/components/TeacherSummary.jsx`).
-- **Targeted remediation.** Claude writes a micro-lesson from the student's exact observed error tags,
-  not a generic solution (`frontend/src/services/claude.js`).
-- **Closed loop.** A verification question re-measures mastery and shows before% / after%
-  (`frontend/src/components/InterventionPanel.jsx`). The honesty label makes clear it is an updated
-  estimate, not proof.
+- **Quantified.** The session report turns the diagnosis into numbers: one keystone skill, N
+  downstream skills it unblocks, the confidence, the diagnostic and practice stats, and the mastery
+  delta, with a one-click "copy summary for your teacher" (report screen in `frontend/src/App.jsx`).
+- **Targeted remediation.** Claude writes a micro-lesson and three fresh practice questions from the
+  student's exact observed error tags, not a generic solution (`frontend/src/services/claude.js`);
+  the diagnosis and lesson screens show those observed errors back to the student.
+- **Closed loop.** A practice run re-measures mastery after the lesson and shows before% / now%
+  (verify + report screens in `frontend/src/App.jsx`). The honesty label makes clear it is an
+  updated estimate, not proof, and the estimate persists on-device so students can re-test later.
 
 ## Creative Use of AI/ML
 

@@ -10,10 +10,10 @@ flowchart TD
     C --> D{Layer 3: enough evidence?<br/>obs >= 4, top >= 0.5, top is a real skill}
     D -- no --> E[Pick the next question by<br/>expected information gain]
     E --> A
-    D -- yes --> F[Reveal: keystone skill,<br/>ranked hypotheses, why-not sentence]
-    F --> G[Layer 4: Claude writes a micro-lesson<br/>+ one verification question<br/>fed structured evidence only]
-    G --> H[Student answers verification]
-    H --> I[BKT re-measures the keystone skill<br/>before% / after%]
+    D -- yes --> F[Diagnosis: keystone skill,<br/>observed errors, why-not sentence]
+    F --> G[Layer 4: Claude writes a micro-lesson<br/>+ three practice questions<br/>fed structured evidence only]
+    G --> H[Student works the practice loop]
+    H --> I[BKT re-measures the keystone skill<br/>session report: before% / now%]
 ```
 
 ## Data flow between layers
