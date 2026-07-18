@@ -34,6 +34,7 @@ export default function App() {
   const [apiKey, setApiKey] = useState('');
 
   const profile = profileId ? DEMO_PROFILES.find((p) => p.id === profileId) : null;
+  const profileLabel = profile?.label.replace(' — ', ': ');
   const applied = profile ? profile.answers.slice(0, step) : [];
   const observations = useMemo(() => applied.map(([q, c]) => toObservation(q, c)), [applied]);
 
@@ -104,15 +105,18 @@ export default function App() {
 
   return (
     <div className="app">
+      <header className="hero">
       <div className="masthead">
         <span className="wordmark"><span className="k">Key</span>stone</span>
-        <span className="subject-chip">single-variable calculus</span>
+        <span className="subject-chip">CALCULUS DIAGNOSTICS</span>
       </div>
-      <p className="tagline">
-        The visible mistake is rarely the real problem. Keystone finds the <b>prerequisite skill</b> beneath a
-        student's errors, reteaches that exact gap, and <b>verifies</b> the fix moved mastery.
-      </p>
+      <div className="hero-copy"><p className="eyebrow">Find the gap beneath the mistake.</p><h1>Teach the cause,<br />not the symptom.</h1><p className="tagline">Keystone identifies the missing prerequisite behind a student’s error, builds a focused lesson, and checks whether mastery moved.</p></div>
+      <div className="workflow" aria-label="Keystone workflow"><span><b>01</b> Observe</span><i /><span><b>02</b> Diagnose</span><i /><span><b>03</b> Reteach</span><i /><span><b>04</b> Verify</span></div>
+      <div className="proof-strip"><div><b>One root cause</b><span>not a list of symptoms</span></div><div><b>Adaptive evidence</b><span>questions chosen for information gain</span></div><div><b>Measured follow-through</b><span>mastery is checked after reteaching</span></div></div>
+      </header>
 
+      <section className="demo-launcher">
+        <div className="launcher-copy"><span className="label">Interactive demo</span><span>Choose a student and let the evidence accumulate.</span></div>
       <div className="controls">
         <span className="label">Student</span>
         {DEMO_PROFILES.map((p) => (
@@ -123,7 +127,7 @@ export default function App() {
             onClick={() => loadProfile(p.id)}
             title={p.label}
           >
-            Profile {p.id}
+            {p.id}
           </button>
         ))}
         {profile && !fullyApplied && (
@@ -132,15 +136,16 @@ export default function App() {
           </button>
         )}
         <button className="primary" disabled={!observations.length} onClick={() => setRevealed(true)}>
-          Diagnose
+          Reveal diagnosis
         </button>
         <div className="spacer" />
         {profile && <button className="ghost" onClick={reset}>Reset</button>}
       </div>
+      </section>
 
       {profile && (
         <p className="hint" style={{ marginTop: -6, marginBottom: 14 }}>
-          {profile.label}
+          {profileLabel}
         </p>
       )}
 
