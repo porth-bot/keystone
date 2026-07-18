@@ -14,6 +14,7 @@ import { generateIntervention } from './services/claude.js';
 
 import QuestionCard from './components/QuestionCard.jsx';
 import HowItWorks from './components/HowItWorks.jsx';
+import studentPhoto from './assets/student-learning.jpg';
 
 const SKILL_IDS = SKILLS.map((s) => s.id);
 const MIN_QUESTIONS = 4; // matches the engine's insufficient-evidence gate
@@ -256,7 +257,7 @@ export default function App() {
   const why = diagnosis.sufficient ? whyNotLine(diagnosis.whyNot) : null;
 
   return (
-    <div className="shell">
+    <div className={`shell shell-${screen}`}>
       <header className="appbar">
         <button className="brand-btn" onClick={goHome} aria-label="Keystone home">
           <svg className="brand-glyph" viewBox="0 0 26 26" aria-hidden="true">
@@ -278,8 +279,10 @@ export default function App() {
       {/* ---------------- HOME ---------------- */}
       {screen === 'home' && (
         <main className="home">
+          <div className="home-layout">
+          <section className="home-copy">
           <p className="eyebrow">Calculus diagnostic tutor</p>
-          <h1>Let's find what's actually<br />tripping you up.</h1>
+          <h1>Fix the gap beneath the mistake.</h1>
           <p className="lead">
             Keep missing the same kind of problem? The mistake you see is usually a symptom. Answer a
             few questions and Keystone finds the one prerequisite underneath it, teaches that, and
@@ -300,6 +303,15 @@ export default function App() {
               </span>
             </div>
           )}
+          </section>
+          <figure className="hero-photo">
+            <img src={studentPhoto} alt="University student studying with a laptop and notebook" />
+            <figcaption>
+              <span className="photo-mark">K</span>
+              <span><small>The Keystone principle</small><b>A wrong answer is evidence, not a verdict.</b></span>
+            </figcaption>
+          </figure>
+          </div>
           <div className="proof-strip">
             <div><b>Adaptive</b><span>every question is picked to separate the likely causes fastest</span></div>
             <div><b>Evidence-backed</b><span>shows the errors it saw, and why the runner-up was ruled out</span></div>
