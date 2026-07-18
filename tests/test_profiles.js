@@ -6,13 +6,15 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-import { SKILLS, skillName } from '../frontend/src/data/skills.js';
+import { SKILLS, SKILL_BY_ID, skillName } from '../frontend/src/data/skills.js';
 import { EDGES } from '../frontend/src/data/edges.js';
 import { QUESTIONS, toObservation } from '../frontend/src/data/questions.js';
 import { DEMO_PROFILES } from '../frontend/src/data/demoProfiles.js';
+import { PRACTICE_BANK } from '../frontend/src/data/practice.js';
 import { buildGraph } from '../frontend/src/engine/graph.js';
 import { buildHypotheses, diagnose } from '../frontend/src/engine/diagnosis.js';
 import { selectNextQuestion } from '../frontend/src/engine/selection.js';
+import { FALLBACKS, fallbackLesson } from '../frontend/src/services/claude.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const params = JSON.parse(readFileSync(join(here, '../frontend/src/data/parameters.json'), 'utf8'));
@@ -55,6 +57,35 @@ check('exponent gap does NOT break composition', !descExp.has('function_composit
 const first = selectNextQuestion(QUESTIONS, [], skillIds, graph, { hypotheses, params });
 check('info-gain selection yields a question', !!first?.question);
 check('info-gain of first question is positive', first.infoGain > 0, `gain=${first.infoGain.toFixed(3)}`);
+
+console.log('\nContent integrity tests\n');
+// Practice bank: every keystone maps to real skills; every question is well-formed; the correct
+// choice carries no misconception tag (tags mark wrong answers only).
+for (const [skill, qs] of Object.entries(PRACTICE_BANK)) {
+  check(`practice bank skill "${skill}" exists`, skill in SKILL_BY_ID);
+  check(`practice bank "${skill}" has 3+ questions`, qs.length >= 3);
+  for (const q of qs) {
+    const okShape =
+      Number.isInteger(q.ans) &&
+      q.ans >= 0 &&
+      q.ans < q.choices.length &&
+      q.choices.length >= 2 &&
+      !q.choices[q.ans].tag &&
+      q.choices.every((c) => typeof c.t === 'string' && c.t.length > 0);
+    check(`practice "${skill}": ${q.prompt.slice(0, 44)}…`, okShape);
+  }
+}
+// Fallback lessons: valid verification questions, and every fallback keystone yields a practice
+// queue with at least 3 questions (verification + bank), so "next question" never repeats.
+for (const [skill, f] of Object.entries(FALLBACKS)) {
+  const v = f.verification;
+  check(
+    `fallback "${skill}" verification well-formed`,
+    Number.isInteger(v.answerIndex) && v.answerIndex >= 0 && v.answerIndex < v.choices.length,
+  );
+  const lesson = fallbackLesson({ skill, skillName: skillName(skill) });
+  check(`fallback "${skill}" practice queue has 3+ questions`, lesson.questions.length >= 3);
+}
 
 console.log(`\n${failures === 0 ? 'ALL TESTS PASSED' : failures + ' TEST(S) FAILED'}`);
 process.exit(failures === 0 ? 0 : 1);
