@@ -266,6 +266,7 @@ export default function App() {
           </svg>
           <span className="wordmark"><span className="k">Key</span>stone</span>
         </button>
+        {screen === 'home' && <span className="appbar-note">Adaptive mastery diagnostics</span>}
         {screen !== 'home' && (
           <div className="stepper">
             {steps.map((s, i) => (
@@ -303,6 +304,12 @@ export default function App() {
               </span>
             </div>
           )}
+          <div className="proof-flow">
+            <div><span className="proof-index">01</span><span><b>Ask adaptively</b><small>Each question separates the likely causes as quickly as possible.</small></span></div>
+            <div><span className="proof-index">02</span><span><b>Show the evidence</b><small>See what the model observed and why alternatives were ruled out.</small></span></div>
+            <div><span className="proof-index">03</span><span><b>Verify the fix</b><small>Reteach the one gap, then measure mastery with fresh practice.</small></span></div>
+          </div>
+          <p className="home-meta">Usually 4 to 7 questions. No sign-up required.</p>
           </section>
           <figure className="hero-photo">
             <img src={studentPhoto} alt="University student studying with a laptop and notebook" />
@@ -312,12 +319,6 @@ export default function App() {
             </figcaption>
           </figure>
           </div>
-          <div className="proof-strip">
-            <div><b>Adaptive</b><span>every question is picked to separate the likely causes fastest</span></div>
-            <div><b>Evidence-backed</b><span>shows the errors it saw, and why the runner-up was ruled out</span></div>
-            <div><b>Verified</b><span>teaches the one gap, then re-measures mastery with fresh practice</span></div>
-          </div>
-          <p className="home-note">Usually {MIN_QUESTIONS}-7 questions · answer with keys A-D · no sign-up</p>
         </main>
       )}
 
