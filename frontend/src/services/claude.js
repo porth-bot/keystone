@@ -92,8 +92,8 @@ export async function generateIntervention(evidence, { apiKey } = {}) {
 const FALLBACKS = {
   function_composition: {
     misconception: 'You apply the outer function before the inner one, or compose them in the wrong order.',
-    analogy: 'Composition is a factory line: g runs first and hands its output to f. f(g(x)) means "do g, then feed that result into f" — never the reverse.',
-    workedExample: 'f(x)=x+1, g(x)=x^2. Then f(g(x)) = f(x^2) = x^2 + 1. The inner output x^2 becomes f\'s input, so you add 1 to x^2 — not to x.',
+    analogy: 'Composition is a factory line: g runs first and hands its output to f. f(g(x)) means "do g, then feed that result into f", never the reverse.',
+    workedExample: 'f(x)=x+1, g(x)=x^2. Then f(g(x)) = f(x^2) = x^2 + 1. The inner output x^2 becomes f\'s input, so you add 1 to x^2, not to x.',
     verification: {
       prompt: 'If f(x) = 2x and g(x) = x + 3, what is f(g(x))?',
       choices: ['2(x + 3) = 2x + 6', '2x + 3', 'x + 3', '2x·(x + 3)'],
@@ -133,7 +133,7 @@ const FALLBACKS = {
   product_quotient_rule: {
     misconception: 'You multiply the two derivatives together instead of "first times derivative of second, plus second times derivative of first."',
     analogy: 'The product rule shares the work: each factor takes a turn being differentiated while the other stays put, and you add the two turns.',
-    workedExample: 'd/dx [x^2 · sin x] = (2x)(sin x) + (x^2)(cos x) — not (2x)(cos x).',
+    workedExample: 'd/dx [x^2 · sin x] = (2x)(sin x) + (x^2)(cos x), not (2x)(cos x).',
     verification: {
       prompt: 'Differentiate f(x) = x · e^x.',
       choices: ['e^x + x·e^x', '1·e^x', 'x·e^x', 'e^x'],
@@ -142,7 +142,7 @@ const FALLBACKS = {
   },
   implicit_differentiation: {
     misconception: 'You differentiate y-terms as if y were a constant, forgetting the dy/dx factor.',
-    analogy: 'y is a secret function of x. Every time you differentiate a y, the chain rule tacks on a dy/dx — the reminder that y depends on x.',
+    analogy: 'y is a secret function of x. Every time you differentiate a y, the chain rule tacks on a dy/dx, the reminder that y depends on x.',
     workedExample: 'x^2 + y^2 = 25 → 2x + 2y·(dy/dx) = 0 → dy/dx = −x/y. The 2y·(dy/dx) is the piece people drop.',
     verification: {
       prompt: 'Given y^2 = x, find dy/dx.',

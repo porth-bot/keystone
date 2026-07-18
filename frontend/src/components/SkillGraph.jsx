@@ -13,17 +13,18 @@ const PAD_X = 16;
 const PAD_Y = 22;
 
 function masteryFill(L) {
-  if (L < 0.4) return '#fdecec';
-  if (L < 0.7) return '#fff4e0';
-  return '#e7f6ee';
+  if (L < 0.4) return '#f8e6e2';
+  if (L < 0.7) return '#f8eecf';
+  return '#e6f3ea';
 }
 function masteryStroke(L) {
-  if (L < 0.4) return '#e5484d';
-  if (L < 0.7) return '#e08a00';
-  return '#2f9e6b';
+  if (L < 0.4) return '#c8433f';
+  if (L < 0.7) return '#bd7d0a';
+  return '#2f8f5f';
 }
 
-export default function SkillGraph({ skills, edges, mastery, reveal }) {
+export default function SkillGraph({ skills, edges, mastery, reveal, assessed }) {
+  const known = assessed ?? new Set();
   const { pos, width, height } = useMemo(() => {
     const tiers = {};
     for (const s of skills) (tiers[s.tier] ??= []).push(s);
@@ -79,6 +80,16 @@ export default function SkillGraph({ skills, edges, mastery, reveal }) {
           const L = mastery[s.id] ?? 0.3;
           const isKey = s.id === keystone;
           const isImpaired = impaired.has(s.id) && !isKey;
+          const isKnown = known.has(s.id);
+          // Untested skills stay neutral so the coloring only ever means "evidence says so".
+          let fill = '#f4efe4';
+          let stroke = '#d8d1c1';
+          let sw = 1.1;
+          let labelInk = true;
+          if (isKey) { fill = '#f6ecd6'; stroke = '#a9721a'; sw = 2.4; }
+          else if (reveal?.sufficient && isImpaired) { fill = masteryFill(L); stroke = '#c8433f'; sw = 1.8; }
+          else if (isKnown) { fill = masteryFill(L); stroke = masteryStroke(L); sw = 1.3; }
+          else { labelInk = false; }
           return (
             <g key={s.id} style={{ opacity: dim(s.id) }}>
               {isKey && (
@@ -99,11 +110,17 @@ export default function SkillGraph({ skills, edges, mastery, reveal }) {
                 width={NODE_W}
                 height={NODE_H}
                 rx={8}
-                fill={isKey ? '#eeecfe' : masteryFill(L)}
-                stroke={isKey ? '#5b4bef' : isImpaired ? '#e5484d' : masteryStroke(L)}
-                strokeWidth={isKey ? 2.4 : isImpaired ? 1.8 : 1.2}
+                fill={fill}
+                stroke={stroke}
+                strokeWidth={sw}
               />
-              <text className="node-label" x={p.cx} y={p.cy + 3} textAnchor="middle">
+              <text
+                className="node-label"
+                x={p.cx}
+                y={p.cy + 3}
+                textAnchor="middle"
+                style={{ fill: labelInk ? 'var(--ink)' : 'var(--muted)' }}
+              >
                 {s.name.length > 22 ? s.name.slice(0, 21) + '…' : s.name}
               </text>
             </g>
@@ -112,10 +129,10 @@ export default function SkillGraph({ skills, edges, mastery, reveal }) {
       </svg>
 
       <div className="graph-legend">
-        <span><i className="legend-dot" style={{ background: '#2f9e6b' }} /> mastered</span>
-        <span><i className="legend-dot" style={{ background: '#e08a00' }} /> partial</span>
-        <span><i className="legend-dot" style={{ background: '#e5484d' }} /> weak</span>
-        <span><i className="legend-dot" style={{ background: '#5b4bef' }} /> keystone</span>
+        <span><i className="legend-dot" style={{ background: '#2f8f5f' }} /> mastered</span>
+        <span><i className="legend-dot" style={{ background: '#bd7d0a' }} /> partial</span>
+        <span><i className="legend-dot" style={{ background: '#c8433f' }} /> weak</span>
+        <span><i className="legend-dot" style={{ background: '#a9721a' }} /> keystone</span>
       </div>
     </div>
   );

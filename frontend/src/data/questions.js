@@ -157,9 +157,9 @@ export const QUESTIONS = [
     prompt: 'A function has a hole at x = 1. Is it continuous at x = 1?',
     ans: 0,
     choices: [
-      { t: 'No — it is not defined there' },
-      { t: 'Yes — the limit exists', tag: 'confused the limit existing with continuity' },
-      { t: 'Yes — it can be made continuous', tag: 'confused removable with continuous' },
+      { t: 'No, it is not defined there' },
+      { t: 'Yes, the limit exists', tag: 'confused the limit existing with continuity' },
+      { t: 'Yes, it can be made continuous', tag: 'confused removable with continuous' },
       { t: 'Only from the left', tag: 'confused one-sided limits with continuity' },
     ],
   },

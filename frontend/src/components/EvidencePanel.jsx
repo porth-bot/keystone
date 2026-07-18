@@ -5,7 +5,7 @@
 import { skillName } from '../data/skills.js';
 import { HEALTHY } from '../engine/diagnosis.js';
 
-export default function EvidencePanel({ diagnosis, nObs }) {
+export default function EvidencePanel({ diagnosis, nObs, whyNotText }) {
   if (!diagnosis) {
     return (
       <div className="panel">
@@ -64,7 +64,8 @@ export default function EvidencePanel({ diagnosis, nObs }) {
 
       {sufficient && whyNot && (
         <div className="whynot">
-          <span className="lbl">Why not {skillName(whyNot.runnerUp)}?</span> {whyNot.sentence}
+          <span className="lbl">Why not {whyNot.runnerUp === HEALTHY ? 'no-gap' : skillName(whyNot.runnerUp)}?</span>{' '}
+          {whyNotText ? whyNotText(whyNot) : whyNot.sentence}
         </div>
       )}
     </div>
