@@ -1,29 +1,39 @@
 // Layer 4: the intervention. The model (layers 1-3) has ALREADY decided the keystone; Claude only
-// explains it. Claude never picks the gap. We hand Claude structured diagnostic evidence and ask
-// for strict JSON: misconception, analogy, worked example, and one verification question.
+// explains it and writes practice for it. Claude never picks the gap. We hand Claude structured
+// diagnostic evidence and ask for strict JSON: misconception, analogy, worked example, and three
+// fresh practice questions.
 //
 // If no API key is present (the default), or the API fails, we fall back to deterministic lessons
-// for the common keystones so the demo never breaks. The UI labels which path produced the lesson.
+// plus the per-keystone practice bank, so the demo never breaks and "next question" always has a
+// genuinely new question. The UI labels which path produced the lesson.
 
-const ANTHROPIC_MODEL = 'claude-opus-4-8'; // configurable; only used when an API key is supplied
+import { PRACTICE_BANK } from '../data/practice.js';
+
+const ANTHROPIC_MODEL = 'claude-opus-4-8'; // used only when an API key is supplied
 
 const SYSTEM_PROMPT = `You are the remediation author inside Keystone, a calculus diagnostic tutor.
 A separate Bayesian model has already identified the single "keystone" prerequisite skill that is
-causing a student's mistakes. Your ONLY job is to explain that specific skill and check it. You do
-not choose the skill and you do not diagnose.
+causing a student's mistakes. Your ONLY job is to explain that exact skill and write practice for
+it. You do not choose the skill and you do not diagnose.
 
 Return ONLY a JSON object (no markdown, no code fences, no prose before or after) with EXACTLY:
 {
-  "misconception": "one sentence naming the specific wrong mental model, in plain language",
+  "misconception": "one sentence naming the student's specific wrong mental model, second person, plain language",
   "analogy": "a short concrete analogy that reframes the idea",
-  "workedExample": "one short worked example with the key step highlighted in words",
-  "verification": {
-    "prompt": "one new question that tests the SAME keystone skill",
-    "choices": ["correct answer", "distractor", "distractor", "distractor"],
-    "answerIndex": 0
-  }
+  "workedExample": "one short worked example with the key step spelled out in words",
+  "practice": [
+    { "prompt": "a new question testing the SAME keystone skill", "choices": ["...", "...", "...", "..."], "answerIndex": 0 },
+    { "prompt": "...", "choices": ["...", "...", "...", "..."], "answerIndex": 0 },
+    { "prompt": "...", "choices": ["...", "...", "...", "..."], "answerIndex": 0 }
+  ]
 }
-Keep every field tight. Use the student's observed error tags. Put the correct answer at answerIndex.`;
+Rules:
+- exactly 3 practice questions, all new (never reuse the student's diagnostic questions), gently increasing in difficulty
+- each question has exactly 4 choices; answerIndex is the position of the correct choice
+- every wrong choice must reflect a real, distinct misconception about this skill
+- use the student's observed error tags to target the explanation
+- write all math as plain text: ^ for powers, sqrt() or the root symbol for roots; no LaTeX, no $ signs
+- keep every field tight`;
 
 function buildUserPrompt(evidence) {
   return [
@@ -41,17 +51,34 @@ function buildUserPrompt(evidence) {
 const stripFences = (t) =>
   t.trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
 
+// Normalized question shape used everywhere: { skill, prompt, ans, choices: [{ t, tag? }] }
+function normalizeClaudeQuestion(p, skill) {
+  return {
+    skill,
+    prompt: String(p.prompt),
+    ans: p.answerIndex,
+    choices: p.choices.map((t) => ({ t: String(t) })),
+  };
+}
+
 function isValidLesson(o) {
   return (
     o &&
     typeof o.misconception === 'string' &&
     typeof o.analogy === 'string' &&
     typeof o.workedExample === 'string' &&
-    o.verification &&
-    typeof o.verification.prompt === 'string' &&
-    Array.isArray(o.verification.choices) &&
-    o.verification.choices.length >= 2 &&
-    Number.isInteger(o.verification.answerIndex)
+    Array.isArray(o.practice) &&
+    o.practice.length >= 2 &&
+    o.practice.every(
+      (p) =>
+        p &&
+        typeof p.prompt === 'string' &&
+        Array.isArray(p.choices) &&
+        p.choices.length >= 2 &&
+        Number.isInteger(p.answerIndex) &&
+        p.answerIndex >= 0 &&
+        p.answerIndex < p.choices.length,
+    )
   );
 }
 
@@ -70,7 +97,7 @@ export async function generateIntervention(evidence, { apiKey } = {}) {
       },
       body: JSON.stringify({
         model: ANTHROPIC_MODEL,
-        max_tokens: 1200,
+        max_tokens: 2000,
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: buildUserPrompt(evidence) }],
       }),
@@ -80,7 +107,14 @@ export async function generateIntervention(evidence, { apiKey } = {}) {
     const text = data.content?.find((b) => b.type === 'text')?.text ?? '';
     const parsed = JSON.parse(stripFences(text));
     if (!isValidLesson(parsed)) throw new Error('response failed schema check');
-    return { source: 'claude', model: ANTHROPIC_MODEL, ...parsed };
+    return {
+      source: 'claude',
+      model: ANTHROPIC_MODEL,
+      misconception: parsed.misconception,
+      analogy: parsed.analogy,
+      workedExample: parsed.workedExample,
+      questions: parsed.practice.map((p) => normalizeClaudeQuestion(p, evidence.skill)),
+    };
   } catch (err) {
     // Deterministic fallback keeps the demo alive if the API key is bad, rate-limited, or offline.
     return { source: 'fallback', reason: String(err.message || err), ...fallbackLesson(evidence) };
@@ -88,8 +122,9 @@ export async function generateIntervention(evidence, { apiKey } = {}) {
 }
 
 // ---- Deterministic fallback lessons for the common keystones -------------------------------------
+// Exported for the content-integrity tests in tests/test_profiles.js.
 
-const FALLBACKS = {
+export const FALLBACKS = {
   function_composition: {
     misconception: 'You apply the outer function before the inner one, or compose them in the wrong order.',
     analogy: 'Composition is a factory line: g runs first and hands its output to f. f(g(x)) means "do g, then feed that result into f", never the reverse.',
@@ -105,8 +140,8 @@ const FALLBACKS = {
     analogy: 'The chain rule is peeling an onion: differentiate the outer layer, then multiply by how fast the inner layer changes. Skip the inside and your rate is missing a factor.',
     workedExample: 'd/dx (3x+1)^4 = 4(3x+1)^3 · d/dx(3x+1) = 4(3x+1)^3 · 3 = 12(3x+1)^3. The extra ·3 is the inner derivative you must not drop.',
     verification: {
-      prompt: 'Differentiate f(x) = (5x − 2)^3.',
-      choices: ['15(5x − 2)^2', '3(5x − 2)^2', '15(5x − 2)^3', '(5x − 2)^2'],
+      prompt: 'Differentiate f(x) = (5x - 2)^3.',
+      choices: ['15(5x - 2)^2', '3(5x - 2)^2', '15(5x - 2)^3', '(5x - 2)^2'],
       answerIndex: 0,
     },
   },
@@ -123,7 +158,7 @@ const FALLBACKS = {
   power_rule: {
     misconception: 'You forget to bring the exponent down as a coefficient, or you do not reduce the exponent by one.',
     analogy: 'The power rule is a trade that happens together, every time: the exponent hops to the front as a multiplier, and the exponent itself drops by one.',
-    workedExample: 'd/dx x^5 = 5·x^(5−1) = 5x^4. The 5 comes down front; the exponent becomes 4.',
+    workedExample: 'd/dx x^5 = 5·x^(5-1) = 5x^4. The 5 comes down front; the exponent becomes 4.',
     verification: {
       prompt: 'Differentiate f(x) = x^7.',
       choices: ['7x^6', 'x^6', '7x^7', '7x^8'],
@@ -143,7 +178,7 @@ const FALLBACKS = {
   implicit_differentiation: {
     misconception: 'You differentiate y-terms as if y were a constant, forgetting the dy/dx factor.',
     analogy: 'y is a secret function of x. Every time you differentiate a y, the chain rule tacks on a dy/dx, the reminder that y depends on x.',
-    workedExample: 'x^2 + y^2 = 25 → 2x + 2y·(dy/dx) = 0 → dy/dx = −x/y. The 2y·(dy/dx) is the piece people drop.',
+    workedExample: 'x^2 + y^2 = 25 → 2x + 2y·(dy/dx) = 0 → dy/dx = -x/y. The 2y·(dy/dx) is the piece people drop.',
     verification: {
       prompt: 'Given y^2 = x, find dy/dx.',
       choices: ['1/(2y)', '2y', '1', '2x'],
@@ -157,12 +192,23 @@ const GENERIC = (evidence) => ({
   analogy: 'Think of the prerequisite as the foundation: when it is shaky, everything built on top wobbles even if that upper work is done correctly.',
   workedExample: `Re-establish ${evidence.skillName} on a simple case first, then re-attempt the harder problem. The harder problem was failing because this step underneath it was.`,
   verification: {
-    prompt: `Solve one clean, isolated ${evidence.skillName} problem before returning to the harder material.`,
-    choices: ['I can do the isolated version', 'I still miss the isolated version'],
+    prompt: `Can you solve one clean, isolated ${evidence.skillName} problem on paper right now?`,
+    choices: ['Yes, the isolated version works', 'No, the isolated version still breaks'],
     answerIndex: 0,
   },
 });
 
 export function fallbackLesson(evidence) {
-  return FALLBACKS[evidence.skill] ?? GENERIC(evidence);
+  const base = FALLBACKS[evidence.skill] ?? GENERIC(evidence);
+  const v = base.verification;
+  const questions = [
+    { skill: evidence.skill, prompt: v.prompt, ans: v.answerIndex, choices: v.choices.map((t) => ({ t })) },
+    ...(PRACTICE_BANK[evidence.skill] ?? []).map((q) => ({ skill: evidence.skill, ...q })),
+  ];
+  return {
+    misconception: base.misconception,
+    analogy: base.analogy,
+    workedExample: base.workedExample,
+    questions,
+  };
 }

@@ -17,21 +17,46 @@ import HowItWorks from './components/HowItWorks.jsx';
 
 const SKILL_IDS = SKILLS.map((s) => s.id);
 const MIN_QUESTIONS = 4; // matches the engine's insufficient-evidence gate
+const LS_KEY = 'keystone.lastSession';
 const clean = (t) => (t ? t.replaceAll(' — ', ', ') : t);
+
+function loadLast() {
+  try {
+    return JSON.parse(localStorage.getItem(LS_KEY) || 'null');
+  } catch {
+    return null;
+  }
+}
+
+// The engine's "why not the runner-up" evidence, phrased for the student.
+function whyNotLine(whyNot) {
+  if (!whyNot) return null;
+  const o = whyNot.keyObservation;
+  if (whyNot.runnerUp === HEALTHY) {
+    return o.correct
+      ? null
+      : `Having no gap at all would mean solving the ${skillName(o.skill)} question you missed. That rules it out.`;
+  }
+  const did = o.correct ? 'solved' : 'missed';
+  const pred = o.correct ? 'miss' : 'solve';
+  return `You ${did} a ${skillName(o.skill)} question, and a ${skillName(whyNot.runnerUp)} gap predicts you would ${pred} it. That rules it out.`;
+}
 
 export default function App() {
   const graph = useMemo(() => buildGraph(SKILL_IDS, EDGES), []);
   const hypotheses = useMemo(() => buildHypotheses(SKILL_IDS, graph, {}), [graph]);
 
-  const [screen, setScreen] = useState('home'); // home | quiz | diagnosis | lesson | verify
+  const [screen, setScreen] = useState('home'); // home | quiz | diagnosis | lesson | verify | report
   const [mode, setMode] = useState('live'); // live | demo
   const [profileId, setProfileId] = useState(null);
   const [answers, setAnswers] = useState([]); // [[questionId, choiceIndex], ...]
   const [answeredCard, setAnsweredCard] = useState(null); // brief feedback beat
   const [lesson, setLesson] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [verify, setVerify] = useState({ answeredIndex: null, before: 0, after: 0 });
+  const [practice, setPractice] = useState(null); // { queue, i, attempts, masteryStart, masteryNow }
   const [apiKey, setApiKey] = useState('');
+  const [last, setLast] = useState(loadLast);
+  const [copied, setCopied] = useState(false);
 
   const profile = profileId ? DEMO_PROFILES.find((p) => p.id === profileId) : null;
 
@@ -86,17 +111,60 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen]);
 
-  function reset(toScreen) {
+  // When a lesson lands, build the practice queue (Claude's fresh questions, or the deterministic
+  // bank). If a rare keystone has a thin queue, top it up with unused diagnostic questions.
+  useEffect(() => {
+    if (!lesson?.questions?.length || !diagnosis.keystone) return;
+    let queue = lesson.questions;
+    if (queue.length < 2) {
+      const extras = QUESTIONS.filter((q) => q.skill === diagnosis.keystone && !answeredIds.has(q.id))
+        .map((q) => ({ skill: q.skill, prompt: q.prompt, ans: q.ans, choices: q.choices }));
+      queue = [...queue, ...extras];
+    }
+    const m = mastery[diagnosis.keystone] ?? 0.3;
+    setPractice({ queue, i: 0, attempts: [], masteryStart: m, masteryNow: m });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lesson]);
+
+  // Persist a session summary whenever the report is (re)shown.
+  useEffect(() => {
+    if (screen !== 'report' || !diagnosis.sufficient || !practice) return;
+    const summary = {
+      at: new Date().toISOString().slice(0, 10),
+      keystone: diagnosis.keystone,
+      keystoneName: skillName(diagnosis.keystone),
+      confidence: Math.round(diagnosis.top.prob * 100),
+      nDiagnostic: answers.length,
+      nMissed: observations.filter((o) => !o.correct).length,
+      practiced: practice.attempts.length,
+      practicedCorrect: practice.attempts.filter((a) => a.correct).length,
+      masteryStart: Math.round(practice.masteryStart * 100),
+      masteryNow: Math.round(practice.masteryNow * 100),
+      unblocks: graph.descendants[diagnosis.keystone].map(skillName),
+    };
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(summary));
+    } catch { /* private mode etc. */ }
+    setLast(summary);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, practice]);
+
+  function resetSession(toScreen) {
     setAnswers([]);
     setAnsweredCard(null);
     setLesson(null);
     setLoading(false);
-    setVerify({ answeredIndex: null, before: 0, after: 0 });
+    setPractice(null);
+    setCopied(false);
     setScreen(toScreen);
   }
-  function startLive() { setMode('live'); setProfileId(null); reset('quiz'); }
-  function startDemo(id = 'A') { setMode('demo'); setProfileId(id); reset('quiz'); }
-  function goHome() { setMode('live'); setProfileId(null); reset('home'); }
+  function startLive() { setMode('live'); setProfileId(null); resetSession('quiz'); }
+  function startDemo(id = 'A') { setMode('demo'); setProfileId(id); resetSession('quiz'); }
+  function goHome() { setMode('live'); setProfileId(null); resetSession('home'); }
+  function clearLast() {
+    try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ }
+    setLast(null);
+  }
 
   function answerQuiz(i) {
     if (!nextPick) return;
@@ -123,17 +191,32 @@ export default function App() {
     setLoading(false);
   }
 
-  function answerVerification(i) {
-    const keystone = diagnosis.keystone;
-    const before = mastery[keystone];
-    const correct = i === lesson.verification.answerIndex;
-    const after = updateBKT(before, correct, paramsFor(params, keystone));
-    setVerify({ answeredIndex: i, before, after });
+  function answerPractice(i) {
+    if (!practice) return;
+    const cur = practice.queue[practice.i];
+    if (!cur || practice.attempts[practice.i]) return;
+    const correct = i === cur.ans;
+    const after = updateBKT(practice.masteryNow, correct, paramsFor(params, diagnosis.keystone));
+    setPractice((p) => ({ ...p, attempts: [...p.attempts, { choice: i, correct }], masteryNow: after }));
   }
-  function retest() {
-    setLesson(null);
-    setVerify({ answeredIndex: null, before: 0, after: 0 });
-    setScreen('lesson');
+  function nextPractice() {
+    setPractice((p) => (p && p.i + 1 < p.queue.length ? { ...p, i: p.i + 1 } : p));
+    setScreen('verify');
+  }
+
+  async function copySummary() {
+    if (!last) return;
+    const text =
+      `Keystone session (${last.at}): diagnosed keystone skill = ${last.keystoneName} ` +
+      `(${last.confidence}% confidence after ${last.nDiagnostic} questions, ${last.nMissed} missed). ` +
+      `Practice: ${last.practicedCorrect}/${last.practiced} correct. ` +
+      `Estimated mastery ${last.masteryStart}% -> ${last.masteryNow}%. ` +
+      `Recommend reteaching ${last.keystoneName} before ${last.unblocks.slice(0, 3).join(', ')}.`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard unavailable */ }
   }
 
   // ---- derived view helpers ----
@@ -143,10 +226,22 @@ export default function App() {
   const topReal = diagnosis.top && diagnosis.top.id !== HEALTHY;
   const leadName = topReal ? skillName(diagnosis.top.id) : null;
 
-  const steps = ['Diagnose', 'Learn', 'Verify'];
-  const stepIndex = screen === 'lesson' ? 1 : screen === 'verify' ? 2 : 0;
+  const errorTagLines = useMemo(() => {
+    const seen = new Set();
+    return observations
+      .filter((o) => !o.correct && o.errorTag)
+      .filter((o) => {
+        const k = `${o.skill}|${o.errorTag}`;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      })
+      .slice(0, 3);
+  }, [observations]);
 
-  // quiz progress reading
+  const steps = ['Diagnose', 'Learn', 'Verify'];
+  const stepIndex = screen === 'lesson' ? 1 : screen === 'verify' || screen === 'report' ? 2 : 0;
+
   let reading = 'Answer to begin';
   if (answers.length > 0) {
     if (!topReal) reading = 'Looking solid so far';
@@ -154,6 +249,11 @@ export default function App() {
     else reading = `Leaning toward ${leadName}`;
   }
   const progress = Math.min((diagnosis.top?.prob ?? 0) / 0.5, 1) * 100;
+
+  const curPractice = practice?.queue[practice.i] ?? null;
+  const curAttempt = practice?.attempts[practice.i] ?? null;
+  const morePractice = practice ? practice.i + 1 < practice.queue.length : false;
+  const why = diagnosis.sufficient ? whyNotLine(diagnosis.whyNot) : null;
 
   return (
     <div className="shell">
@@ -189,7 +289,18 @@ export default function App() {
             <button className="primary lg" onClick={startLive}>Start the diagnostic →</button>
             <button className="link" onClick={() => startDemo('A')}>▶ Watch a 30-second sample</button>
           </div>
-          <p className="home-note">Adaptive · usually {MIN_QUESTIONS}–7 questions · no sign-up</p>
+          {last && (
+            <div className="resume">
+              <span>
+                <b>Last session</b> · {last.keystoneName} · mastery {last.masteryStart}% → {last.masteryNow}%
+              </span>
+              <span className="resume-actions">
+                <button className="sm" onClick={startLive}>Re-test →</button>
+                <button className="sm ghost" onClick={clearLast} aria-label="Clear saved session">✕</button>
+              </span>
+            </div>
+          )}
+          <p className="home-note">Adaptive · usually {MIN_QUESTIONS}-7 questions · answer with keys A-D · no sign-up</p>
         </main>
       )}
 
@@ -248,6 +359,25 @@ export default function App() {
                 above it tested clean. It is the earliest place the evidence points, so it is the one
                 worth fixing first. {confPct}% confident after {answers.length} questions.
               </p>
+
+              {errorTagLines.length > 0 && (
+                <div className="saw">
+                  <div className="saw-h">What we saw in your answers</div>
+                  {errorTagLines.map((o) => (
+                    <div className="saw-row" key={`${o.skill}|${o.errorTag}`}>
+                      <b>{skillName(o.skill)}:</b>&nbsp;you {clean(o.errorTag)}.
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {why && (
+                <p className="whynot-line">
+                  <b>Why not {diagnosis.whyNot.runnerUp === HEALTHY ? 'no gap at all' : skillName(diagnosis.whyNot.runnerUp)}?</b>{' '}
+                  {why}
+                </p>
+              )}
+
               {blocked.length > 0 && (
                 <div className="unblocks">
                   <div className="unblocks-label">Fixing this unblocks</div>
@@ -292,6 +422,11 @@ export default function App() {
               <p className="muted loading-line">Writing a lesson for your exact misconception…</p>
             ) : (
               <>
+                {errorTagLines.length > 0 && (
+                  <p className="observed">
+                    On your diagnostic, you {errorTagLines.map((o) => clean(o.errorTag)).join(', and you ')}.
+                  </p>
+                )}
                 <div className="lblock">
                   <div className="lbl">The misconception</div>
                   <p>{clean(lesson.misconception)}</p>
@@ -305,37 +440,104 @@ export default function App() {
                   <p className="mono ex">{clean(lesson.workedExample)}</p>
                 </div>
                 <button className="primary lg" onClick={() => setScreen('verify')}>Check my understanding →</button>
+                {lesson.source === 'fallback' && (
+                  <p className="caption">Tip: add an Anthropic API key in the footer and Claude writes this lesson and its practice questions live, from your exact errors.</p>
+                )}
               </>
             )}
           </div>
         </main>
       )}
 
-      {/* ---------------- VERIFY ---------------- */}
-      {screen === 'verify' && diagnosis.sufficient && lesson && (
+      {/* ---------------- VERIFY (practice loop) ---------------- */}
+      {screen === 'verify' && diagnosis.sufficient && practice && curPractice && (
         <main className="stage">
           <QuestionCard
-            question={{ skill: keystone, prompt: lesson.verification.prompt, ans: lesson.verification.answerIndex, choices: lesson.verification.choices.map((t) => ({ t })) }}
-            mode={verify.answeredIndex == null ? 'answer' : 'review'}
-            chosenIndex={verify.answeredIndex}
-            onAnswer={answerVerification}
-            caption={verify.answeredIndex == null ? 'One check on the skill we just taught.' : null}
+            question={curPractice}
+            mode={curAttempt ? 'review' : 'answer'}
+            chosenIndex={curAttempt?.choice ?? null}
+            onAnswer={answerPractice}
+            metaLabel="practice"
+            count={`question ${practice.i + 1} of ${practice.queue.length}`}
+            caption={curAttempt ? null : 'A fresh question on the skill we just covered.'}
           />
 
-          {verify.answeredIndex != null && (
+          {curAttempt && (
             <div className="card verify-result">
-              <h3>{verify.answeredIndex === lesson.verification.answerIndex ? 'That is it.' : 'Not quite, but that is what practice is for.'}</h3>
+              <h3>{curAttempt.correct ? 'That is it.' : 'Not quite. Look back at the worked example.'}</h3>
+              <div className="dots" aria-label="practice history">
+                {practice.queue.map((_, i) => {
+                  const a = practice.attempts[i];
+                  return <span key={i} className={`dot ${a ? (a.correct ? 'ok' : 'no') : 'pending'}`} />;
+                })}
+              </div>
               <p className="muted">Estimated mastery of {skillName(keystone).toLowerCase()}, an updated estimate, not proof.</p>
               <div className="delta">
-                <div className="row before"><span className="cap">before</span><span className="bar"><span style={{ width: `${Math.round(verify.before * 100)}%` }} /></span><span className="num">{Math.round(verify.before * 100)}%</span></div>
-                <div className="row after"><span className="cap">after</span><span className="bar"><span style={{ width: `${Math.round(verify.after * 100)}%` }} /></span><span className="num">{Math.round(verify.after * 100)}%</span></div>
+                <div className="row before"><span className="cap">before</span><span className="bar"><span style={{ width: `${Math.round(practice.masteryStart * 100)}%` }} /></span><span className="num">{Math.round(practice.masteryStart * 100)}%</span></div>
+                <div className="row after"><span className="cap">now</span><span className="bar"><span style={{ width: `${Math.round(practice.masteryNow * 100)}%` }} /></span><span className="num">{Math.round(practice.masteryNow * 100)}%</span></div>
               </div>
               <div className="result-actions">
-                <button className="primary" onClick={retest}>Another practice question</button>
-                <button className="ghost" onClick={startLive}>New diagnostic</button>
+                {morePractice && <button className="primary" onClick={nextPractice}>Next question →</button>}
+                <button className={morePractice ? 'ghost' : 'primary'} onClick={() => setScreen('report')}>Finish session →</button>
+                <button className="ghost" onClick={() => setScreen('lesson')}>Back to the lesson</button>
               </div>
             </div>
           )}
+        </main>
+      )}
+
+      {/* ---------------- REPORT ---------------- */}
+      {screen === 'report' && diagnosis.sufficient && practice && (
+        <main className="stage">
+          <div className="card result">
+            <p className="kicker">Session report</p>
+            <h2 className="keyname">
+              {practice.masteryNow > practice.masteryStart ? (
+                <>You moved <em>{skillName(keystone)}</em> from {Math.round(practice.masteryStart * 100)}% to {Math.round(practice.masteryNow * 100)}%.</>
+              ) : (
+                <><em>{skillName(keystone)}</em> is still shaky, and now you know it.</>
+              )}
+            </h2>
+
+            <div className="report-grid">
+              <div className="stat">
+                <div className="n accent">{skillName(keystone)}</div>
+                <div className="l">keystone found at {confPct}% confidence</div>
+              </div>
+              <div className="stat">
+                <div className="n">{answers.length}</div>
+                <div className="l">diagnostic questions ({observations.filter((o) => !o.correct).length} missed)</div>
+              </div>
+              <div className="stat">
+                <div className="n">{practice.attempts.filter((a) => a.correct).length}/{practice.attempts.length}</div>
+                <div className="l">practice questions correct</div>
+              </div>
+              <div className="stat">
+                <div className="n">{blocked.length}</div>
+                <div className="l">downstream skills this unblocks</div>
+              </div>
+            </div>
+
+            {blocked.length > 0 && (
+              <div className="unblocks">
+                <div className="unblocks-label">Now worth revisiting</div>
+                <div className="chips">
+                  {blocked.map((b) => (<span className="chip-pill" key={b}>{b}</span>))}
+                </div>
+              </div>
+            )}
+
+            <p className="honesty">
+              Mastery numbers are the model's updated estimates from your answers, not proof of learning.
+              Re-test tomorrow; the estimate stays saved on this device.
+            </p>
+
+            <div className="result-actions">
+              {morePractice && <button className="gold" onClick={nextPractice}>Keep practicing →</button>}
+              <button className="primary" onClick={startLive}>New diagnostic</button>
+              <button className="ghost" onClick={copySummary}>{copied ? 'Copied ✓' : 'Copy summary for your teacher'}</button>
+            </div>
+          </div>
         </main>
       )}
 
