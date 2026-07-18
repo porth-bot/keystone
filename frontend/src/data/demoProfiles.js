@@ -14,7 +14,7 @@
 export const DEMO_PROFILES = [
   {
     id: 'A',
-    label: 'Ava — misses composition & chain, but powers through the power rule',
+    label: 'Ava: misses composition & chain, but powers through the power rule',
     trueGap: 'function_composition',
     expected: 'function_composition',
     answers: [
@@ -28,7 +28,7 @@ export const DEMO_PROFILES = [
   },
   {
     id: 'B',
-    label: 'Ben — composes fine, differentiates powers fine, but the chain rule breaks',
+    label: 'Ben: composes fine, differentiates powers fine, but the chain rule breaks',
     trueGap: 'chain_rule',
     expected: 'chain_rule',
     answers: [
@@ -42,7 +42,7 @@ export const DEMO_PROFILES = [
   },
   {
     id: 'C',
-    label: 'Cam — exponent rules are shaky, so every derivative rule collapses',
+    label: 'Cam: exponent rules are shaky, so every derivative rule collapses',
     trueGap: 'exponent_rules',
     expected: 'exponent_rules',
     answers: [
@@ -57,7 +57,7 @@ export const DEMO_PROFILES = [
   },
   {
     id: 'D',
-    label: 'Dana — only two answers in, and they point in different directions',
+    label: 'Dana: only two answers in, and they point in different directions',
     trueGap: null,
     expected: 'insufficient',
     answers: [
