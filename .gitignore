@@ -10,3 +10,5 @@ __pycache__/
 venv/
 # local datasets are not redistributed (see evaluation/README.md)
 evaluation/data/
+# local tool settings
+.claude/
